@@ -113,6 +113,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
         end
       end
 
+
       field :other_user, :user do
         arg :id, :id
 
@@ -129,6 +130,21 @@ defmodule Absinthe.Execution.SubscriptionTest do
         config fn _, %{document: %Absinthe.Blueprint{} = document} ->
           %{type: :subscription, name: op_name} = Absinthe.Blueprint.current_operation(document)
           {:ok, topic: "*", context_id: "*", document_id: op_name}
+        end
+      end
+
+      field :prime, :user do
+        arg :client_id, non_null(:id)
+        arg :prime_data, list_of(:string)
+
+        config fn args, _ ->
+          {
+            :ok,
+            topic: args.client_id,
+            prime: fn ->
+              {:ok, Enum.map(args.prime_data, &(%{id: "some_id", name: &1}))}
+            end
+          }
         end
       end
     end
@@ -608,11 +624,41 @@ defmodule Absinthe.Execution.SubscriptionTest do
     :telemetry.detach(context.test)
   end
 
+  @query """
+  subscription ($clientId: ID!, $primeData: [String]) {
+    prime(clientId: $clientId, primeData: $primeData) {
+      name
+    }
+  }
+  """
+  test "subscription with priming" do
+    client_id = "xyz"
+    prime_data = ["name1", "name2"]
+
+    assert {:more, %{"subscribed" => _topic, continuation: continuation}} =
+             run_subscription(
+               @query,
+               Schema,
+               variables: %{
+                 "primeData" => prime_data,
+                 "clientId" => client_id
+               }
+             )
+
+    assert {:more, %{
+      data: %{"prime" => %{"name" => "name1"}},
+      continuation: continuation}}
+      = Absinthe.continue(continuation)
+
+    assert {:ok, %{data: %{"prime" => %{"name" => "name2"}}}}
+    = Absinthe.continue(continuation)
+  end
+
   defp run_subscription(query, schema, opts \\ []) do
     opts = Keyword.update(opts, :context, %{pubsub: PubSub}, &Map.put(&1, :pubsub, PubSub))
 
-    case run(query, schema, opts) do
-      {:ok, %{"subscribed" => topic}} = val ->
+    case Absinthe.run(query, schema, opts) do
+      {response, %{"subscribed" => topic}} = val when response == :ok or response == :more ->
         PubSub.subscribe(topic)
         val
 
