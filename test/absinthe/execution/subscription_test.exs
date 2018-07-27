@@ -113,6 +113,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
         end
       end
 
+
       field :other_user, :user do
         arg :id, :id
 
@@ -129,6 +130,23 @@ defmodule Absinthe.Execution.SubscriptionTest do
         config fn _, %{document: %Absinthe.Blueprint{} = document} ->
           %{type: :subscription, name: op_name} = Absinthe.Blueprint.current_operation(document)
           {:ok, topic: "*", context_id: "*", document_id: op_name}
+
+      field :catchup, :user do
+        arg :client_id, non_null(:id)
+        arg :catchup_data, list_of(:string)
+
+        config fn args, _ ->
+          {
+            :ok,
+            topic: args.client_id,
+            catchup: fn ->
+              Enum.each(args.catchup_data,
+                &Absinthe.Subscription.publish(
+                  PubSub,
+                  %{id: "some_id", name: &1},
+                  [catchup: args.client_id]))
+            end
+          }
         end
       end
     end
@@ -613,11 +631,45 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     case run(query, schema, opts) do
       {:ok, %{"subscribed" => topic}} = val ->
+
+  defp run(query, schema, opts \\ []) do
+    opts = Keyword.update(opts, :context, %{pubsub: PubSub}, &Map.put(&1, :pubsub, PubSub))
+
+    case Absinthe.run(query, schema, opts) do
+      {response, %{"subscribed" => topic}} = val when response == :ok or response == :more ->
+
         PubSub.subscribe(topic)
         val
 
       val ->
         val
     end
+  end
+
+  @query """
+  subscription ($clientId: ID!, $catchupData: [String]) {
+    catchup(clientId: $clientId, catchupData: $catchupData) {
+      name
+    }
+  }
+  """
+  test "subscription with catchup" do
+    client_id = "xyz"
+    catchup_data = ["name1", "name2"]
+
+    assert {:more, %{"subscribed" => topic, continuation: continuation}} =
+             run(
+               @query,
+               Schema,
+               variables: %{
+                 "catchupData" => catchup_data,
+                 "clientId" => client_id
+               }
+             )
+
+    assert {:ok, %{}} = Absinthe.continue(continuation)
+
+    assert_receive({:broadcast, %{topic: ^topic, result: %{data: %{"catchup" => %{"name" => "name1"}}}}})
+    assert_receive({:broadcast, %{topic: ^topic, result: %{data: %{"catchup" => %{"name" => "name2"}}}}})
   end
 end
