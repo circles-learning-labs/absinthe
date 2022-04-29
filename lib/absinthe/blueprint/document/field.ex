@@ -20,9 +20,7 @@ defmodule Absinthe.Blueprint.Document.Field do
     complexity: nil,
     # Set during resolution, this holds the concrete parent type
     # as determined by the resolution phase.
-    parent_type: nil,
-    # Added by directives
-    dynamic_middleware: []
+    parent_type: nil
   ]
 
   @type t :: %__MODULE__{
@@ -35,7 +33,6 @@ defmodule Absinthe.Blueprint.Document.Field do
           source_location: nil | Blueprint.SourceLocation.t(),
           type_conditions: [Blueprint.TypeReference.Name],
           schema_node: Type.t(),
-          complexity: nil | non_neg_integer,
-          dynamic_middleware: []
+          complexity: nil | non_neg_integer
         }
 end

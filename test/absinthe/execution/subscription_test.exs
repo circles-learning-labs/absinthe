@@ -130,6 +130,8 @@ defmodule Absinthe.Execution.SubscriptionTest do
         config fn _, %{document: %Absinthe.Blueprint{} = document} ->
           %{type: :subscription, name: op_name} = Absinthe.Blueprint.current_operation(document)
           {:ok, topic: "*", context_id: "*", document_id: op_name}
+        end
+      end
 
       field :catchup, :user do
         arg :client_id, non_null(:id)
@@ -626,26 +628,6 @@ defmodule Absinthe.Execution.SubscriptionTest do
     :telemetry.detach(context.test)
   end
 
-  defp run_subscription(query, schema, opts \\ []) do
-    opts = Keyword.update(opts, :context, %{pubsub: PubSub}, &Map.put(&1, :pubsub, PubSub))
-
-    case run(query, schema, opts) do
-      {:ok, %{"subscribed" => topic}} = val ->
-
-  defp run(query, schema, opts \\ []) do
-    opts = Keyword.update(opts, :context, %{pubsub: PubSub}, &Map.put(&1, :pubsub, PubSub))
-
-    case Absinthe.run(query, schema, opts) do
-      {response, %{"subscribed" => topic}} = val when response == :ok or response == :more ->
-
-        PubSub.subscribe(topic)
-        val
-
-      val ->
-        val
-    end
-  end
-
   @query """
   subscription ($clientId: ID!, $catchupData: [String]) {
     catchup(clientId: $clientId, catchupData: $catchupData) {
@@ -658,7 +640,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
     catchup_data = ["name1", "name2"]
 
     assert {:more, %{"subscribed" => topic, continuation: continuation}} =
-             run(
+             run_subscription(
                @query,
                Schema,
                variables: %{
@@ -671,5 +653,19 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     assert_receive({:broadcast, %{topic: ^topic, result: %{data: %{"catchup" => %{"name" => "name1"}}}}})
     assert_receive({:broadcast, %{topic: ^topic, result: %{data: %{"catchup" => %{"name" => "name2"}}}}})
+  end
+
+  defp run_subscription(query, schema, opts \\ []) do
+    opts = Keyword.update(opts, :context, %{pubsub: PubSub}, &Map.put(&1, :pubsub, PubSub))
+
+    case Absinthe.run(query, schema, opts) do
+      {response, %{"subscribed" => topic}} = val when response == :ok or response == :more ->
+
+        PubSub.subscribe(topic)
+        val
+
+      val ->
+        val
+    end
   end
 end

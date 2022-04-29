@@ -132,7 +132,6 @@ defmodule Absinthe.Pipeline do
       # Execution
       {Phase.Subscription.SubscribeSelf, options},
       {Phase.Document.Execution.Resolution, options},
-      Phase.Document.Execution.DeferFields,
       # Format Result
       Phase.Document.Result,
       {Phase.Telemetry, Keyword.put(options, :event, [:execute, :operation, :stop])}

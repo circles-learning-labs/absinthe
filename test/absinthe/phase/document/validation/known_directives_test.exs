@@ -51,9 +51,6 @@ defmodule Absinthe.Phase.Document.Validation.KnownDirectivesTest do
         human @skip(if: false) {
           name
         }
-        cat @defer {
-          name
-        }
       }
       """,
       []
