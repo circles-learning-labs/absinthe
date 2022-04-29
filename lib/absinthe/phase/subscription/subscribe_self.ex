@@ -30,7 +30,7 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
 
       {:replace, blueprint,
        [
-         {Phase.Subscription.Result, topic: subscription_id, catchup: config.catchup},
+         {Phase.Subscription.Result, topic: subscription_id, catchup: config[:catchup]},
          {Phase.Telemetry, Keyword.put(options, :event, [:execute, :operation, :stop])}
        ]}
     else
