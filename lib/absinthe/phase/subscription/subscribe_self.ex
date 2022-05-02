@@ -22,7 +22,7 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
     %{selections: [field]} = op
 
     with {:ok, config} <- get_config(field, context, blueprint) do
-      {field_keys, prime} = get_field_keys(field, config)
+      field_keys = get_field_keys(field, config)
       subscription_id = get_subscription_id(config, blueprint, options)
 
       for field_key <- field_keys,
@@ -30,7 +30,7 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
 
       {:replace, blueprint,
        [
-         {Phase.Subscription.Result, topic: subscription_id, prime: prime},
+         {Phase.Subscription.Result, topic: subscription_id, prime: config[:prime]},
          {Phase.Telemetry, Keyword.put(options, :event, [:execute, :operation, :stop])}
        ]}
     else
@@ -45,11 +45,11 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
     end
   end
 
-  defp get_config(
-         %{schema_node: schema_node, argument_data: argument_data} = field,
-         context,
-         blueprint
-       ) do
+  def get_config(
+        %{schema_node: schema_node, argument_data: argument_data} = field,
+        context,
+        blueprint
+      ) do
     name = schema_node.identifier
 
     config =
@@ -96,9 +96,8 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
   defp get_field_keys(%{schema_node: schema_node} = _field, config) do
     name = schema_node.identifier
 
-    {keys, prime} = find_field_keys!(config)
-    field_keys = Enum.map(keys, fn key -> {name, key} end)
-    {field_keys, prime}
+    find_field_keys!(config)
+    |> Enum.map(fn key -> {name, key} end)
   end
 
   defp ensure_pubsub!(context) do
@@ -133,12 +132,8 @@ defmodule Absinthe.Phase.Subscription.SubscribeSelf do
         """
 
       val ->
-        topics = List.wrap(val)
-                 |> Enum.map(&to_string/1)
-
-        prime = config[:prime] || nil
-
-        {topics, prime}
+        List.wrap(val)
+        |> Enum.map(&to_string/1)
     end
   end
 
