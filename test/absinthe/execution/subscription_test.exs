@@ -329,7 +329,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     assert %{
              event: "subscription:data",
-             result: %{data: %{"thing" => "foo"}, ordinal: nil},
+             result: %{data: %{"thing" => "foo"}},
              topic: topic
            } == msg
   end
@@ -373,7 +373,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     msg = %{
       event: "subscription:data",
-      result: %{data: %{"multipleTopics" => "foo"}, ordinal: nil},
+      result: %{data: %{"multipleTopics" => "foo"}},
       topic: topic
     }
 
@@ -475,7 +475,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     assert %{
              event: "subscription:data",
-             result: %{data: %{"user" => %{"id" => "1", "name" => "foo"}}, ordinal: nil},
+             result: %{data: %{"user" => %{"id" => "1", "name" => "foo"}}},
              topic: topic
            } == msg
   end
@@ -523,7 +523,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     assert %{
              event: "subscription:data",
-             result: %{data: %{"thing" => "foo"}, ordinal: nil},
+             result: %{data: %{"thing" => "foo"}},
              topic: topic
            } == msg
   end
@@ -542,7 +542,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
         assert %{
                  event: "subscription:data",
-                 result: %{data: %{"thing" => "foo"}, ordinal: nil},
+                 result: %{data: %{"thing" => "foo"}},
                  topic: topic
                } == msg
       end)
@@ -755,7 +755,7 @@ defmodule Absinthe.Execution.SubscriptionTest do
 
     assert %{
              event: "subscription:data",
-             result: %{data: %{"thing" => "foo"}, ordinal: nil},
+             result: %{data: %{"thing" => "foo"}},
              topic: topic
            } == msg
 
