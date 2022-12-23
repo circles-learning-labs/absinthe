@@ -10,7 +10,7 @@ defmodule Absinthe.Phase.Subscription.GetOrdinal do
   @spec run(any, Keyword.t()) :: {:ok, Blueprint.t()}
   def run(blueprint, _options \\ []) do
     with %{type: :subscription, selections: [field]} <- Blueprint.current_operation(blueprint),
-         {:ok, config} = SubscribeSelf.get_config(field, blueprint.execution.context, blueprint),
+         {:ok, config} = {:ok, %{}},
          ordinal_fun when is_function(ordinal_fun, 1) <- config[:ordinal] do
       result = ordinal_fun.(blueprint.execution.root_value)
       {:ok, %{blueprint | result: Map.put(blueprint.result, :ordinal, result)}}
