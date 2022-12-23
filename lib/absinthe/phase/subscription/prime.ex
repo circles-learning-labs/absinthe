@@ -9,20 +9,14 @@ defmodule Absinthe.Phase.Subscription.Prime do
     {:ok, put_in(blueprint.execution.root_value, prime_result)}
   end
 
-  def run(blueprint, prime_fun: prime_fun, resolution_options: options) do
-    {:ok, prime_result} = prime_fun.(blueprint.execution)
-
-    case prime_result do
-      [first | rest] ->
-        blueprint = put_in(blueprint.execution.root_value, first)
-        blueprint = maybe_add_continuations(blueprint, rest, options)
-        {:ok, blueprint}
-
-      %{} ->
+  def run(blueprint, prime_fun: prime_fun, resolution_options: _options) do
+    prime_fun.(blueprint.execution)
+    |> case do
+      {:ok, prime_result} ->
         blueprint = put_in(blueprint.execution.root_value, prime_result)
         {:ok, blueprint}
 
-      [] ->
+      _ ->
         blueprint = put_in(blueprint.result, :no_more_results)
         {:replace, blueprint, []}
     end
