@@ -10,7 +10,7 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
 
     directive :feature do
       arg :name, :string
-      on [:scalar]
+      on [:scalar, :schema]
 
       expand(fn _args, node ->
         %{node | __private__: [feature: true]}
@@ -24,6 +24,7 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
     @prototype_schema WithFeatureDirective
 
     query do
+      field :foo, :string
     end
 
     import_sdl """
@@ -34,6 +35,10 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
     type Photo {
       height: Int
       width: Int
+    }
+
+    type MyMutationRootType {
+      name: String
     }
 
     enum Direction {
@@ -54,6 +59,10 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
 
     interface ValuedEntity {
       value: Int
+    }
+
+    extend schema @feature {
+      mutation: MyMutationRootType
     }
 
     extend enum Direction {
@@ -91,6 +100,15 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
     end
 
     def valued_entity_resolve_type(_, _), do: :photo
+  end
+
+  test "can extend schema" do
+    schema_declaration = ExtendedSchema.__absinthe_schema_declaration__()
+
+    assert [%{name: "feature"}] = schema_declaration.directives
+
+    assert [%{name: "query"}, %{name: "mutation", type: %{name: "MyMutationRootType"}}] =
+             schema_declaration.field_definitions
   end
 
   test "can extend enums" do
@@ -229,6 +247,7 @@ defmodule Absinthe.Schema.Notation.Experimental.SdlExtensionsTest do
     use Absinthe.Schema
 
     query do
+      field :foo, :string
     end
 
     import_type_extensions ImportedSchema

@@ -1,6 +1,51 @@
 defmodule Absinthe.Schema.NotationTest do
   use Absinthe.Case, async: true
 
+  describe "query" do
+    test "cannot be non-toplevel" do
+      assert_notation_error(
+        "QueryInvalid",
+        """
+        query do
+          mutation do
+          end
+        end
+        """,
+        "Invalid schema notation: `mutation` must only be used toplevel or in an `extend` block. Was used in `object`."
+      )
+    end
+  end
+
+  describe "subscription" do
+    test "cannot be non-toplevel" do
+      assert_notation_error(
+        "SubscriptionInvalid",
+        """
+        subscription do
+          subscription do
+          end
+        end
+        """,
+        "Invalid schema notation: `subscription` must only be used toplevel or in an `extend` block. Was used in `object`."
+      )
+    end
+  end
+
+  describe "mutation" do
+    test "cannot be non-toplevel" do
+      assert_notation_error(
+        "MutationInvalid",
+        """
+        mutation do
+          mutation do
+          end
+        end
+        """,
+        "Invalid schema notation: `mutation` must only be used toplevel or in an `extend` block. Was used in `object`."
+      )
+    end
+  end
+
   describe "arg" do
     test "can be under field as an attribute" do
       assert_no_notation_error("ArgFieldValid", """
@@ -109,7 +154,7 @@ defmodule Absinthe.Schema.NotationTest do
         """
         field :foo, :string
         """,
-        "Invalid schema notation: `field` must only be used within `input_object`, `interface`, `object`. Was used in `schema`."
+        "Invalid schema notation: `field` must only be used within `input_object`, `interface`, `object`, `schema_declaration`. Was used in `schema`."
       )
     end
   end
@@ -118,6 +163,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be toplevel" do
       assert_no_notation_error("InputObjectValid", """
       input_object :foo do
+        field :foo, :string
       end
       """)
     end
@@ -254,6 +300,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be under object as an attribute" do
       assert_no_notation_error("IsTypeOfValid", """
       object :bar do
+        field :foo, :string
         is_type_of fn _, _ -> true end
       end
       """)
@@ -286,6 +333,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be toplevel" do
       assert_no_notation_error("ObjectValid", """
       object :foo do
+        field :foo, :string
       end
       """)
     end
@@ -300,35 +348,6 @@ defmodule Absinthe.Schema.NotationTest do
         end
         """,
         "Invalid schema notation: `object` must only be used toplevel or in an `extend` block. Was used in `object`."
-      )
-    end
-
-    test "cannot use reserved identifiers" do
-      assert_notation_error(
-        "ReservedIdentifierSubscription",
-        """
-        object :subscription do
-        end
-        """,
-        "Invalid schema notation: cannot create an `object` with reserved identifier `subscription`"
-      )
-
-      assert_notation_error(
-        "ReservedIdentifierQuery",
-        """
-        object :query do
-        end
-        """,
-        "Invalid schema notation: cannot create an `object` with reserved identifier `query`"
-      )
-
-      assert_notation_error(
-        "ReservedIdentifierMutation",
-        """
-        object :mutation do
-        end
-        """,
-        "Invalid schema notation: cannot create an `object` with reserved identifier `mutation`"
       )
     end
   end
@@ -411,6 +430,7 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be under interface as an attribute" do
       assert_no_notation_error("ResolveTypeValidInterface", """
       interface :bar do
+        field :foo, :string
         resolve_type fn _, _ -> :baz end
       end
       """)
@@ -493,8 +513,10 @@ defmodule Absinthe.Schema.NotationTest do
     test "can be under union as an attribute" do
       assert_no_notation_error("TypesValid", """
       object :audi do
+        field :foo, :string
       end
       object :volvo do
+        field :foo, :string
       end
       union :brand do
         types [:audi, :volvo]
@@ -538,6 +560,7 @@ defmodule Absinthe.Schema.NotationTest do
         description \"""
         Here's a description
         \"""
+        field :foo, :string
       end
       """)
     end
@@ -579,6 +602,29 @@ defmodule Absinthe.Schema.NotationTest do
     end
   end
 
+  describe "schema" do
+    test "can be used in extend block" do
+      assert_no_notation_error("ExtendSchemaValid", """
+      extend schema do
+        directive :feature
+        field :query, :query
+      end
+      """)
+    end
+
+    test "can be toplevel" do
+      assert_no_notation_error(
+        "SchemaValid",
+        """
+        schema do
+          directive :feature
+          field :query, :query
+        end
+        """
+      )
+    end
+  end
+
   test "No nested non_null" do
     assert_notation_error(
       "NestedNonNull",
@@ -589,6 +635,19 @@ defmodule Absinthe.Schema.NotationTest do
       """,
       "Invalid schema notation: `non_null` must not be nested"
     )
+  end
+
+  defmodule WithFeatureDirective do
+    use Absinthe.Schema.Prototype
+
+    directive :feature do
+      arg :name, :string
+      on [:scalar, :schema]
+
+      expand(fn _args, node ->
+        %{node | __private__: [feature: true]}
+      end)
+    end
   end
 
   @doc """
@@ -610,14 +669,16 @@ defmodule Absinthe.Schema.NotationTest do
       defmodule MyTestSchema.#{name} do
         use Absinthe.Schema
 
+        @prototype_schema WithFeatureDirective
+
         query do
-          #Query type must exist
+          field :foo, :string
         end
 
         #{text}
       end
       """
-      |> Code.eval_string()
+      |> Code.eval_string([], __ENV__)
     end)
   end
 
@@ -626,13 +687,15 @@ defmodule Absinthe.Schema.NotationTest do
            defmodule MyTestSchema.#{name} do
              use Absinthe.Schema
 
+             @prototype_schema WithFeatureDirective
+
              query do
-               #Query type must exist
+               field :foo, :string
              end
 
              #{text}
            end
            """
-           |> Code.eval_string()
+           |> Code.eval_string([], __ENV__)
   end
 end

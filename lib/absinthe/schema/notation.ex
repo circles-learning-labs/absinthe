@@ -185,14 +185,7 @@ defmodule Absinthe.Schema.Notation do
   end
   ```
   """
-  @reserved_identifiers ~w(query mutation subscription)a
   defmacro object(identifier, attrs \\ [], block)
-
-  defmacro object(identifier, _attrs, _block) when identifier in @reserved_identifiers do
-    raise Absinthe.Schema.Notation.Error,
-          "Invalid schema notation: cannot create an `object` " <>
-            "with reserved identifier `#{identifier}`"
-  end
 
   defmacro object(identifier, attrs, do: block) do
     block = block_from_directive_attrs(attrs, block)
@@ -250,7 +243,7 @@ defmodule Absinthe.Schema.Notation do
 
   @placement {:extend, [toplevel: true]}
   @doc """
-  Extend a graphql type.
+  Extend a GraphQL type.
 
   Extend an existing type with additional fields, values, types and interfaces.
 
@@ -300,6 +293,41 @@ defmodule Absinthe.Schema.Notation do
     |> record_extend!([], block, [])
   end
 
+  defmacro extend({:schema, meta, _}, do: block) do
+    block = {:schema, meta, [] ++ [[do: block]]}
+
+    __CALLER__
+    |> recordable!(:extend, @placement[:extend])
+    |> record_extend!([], block, [])
+  end
+
+  @placement {:schema, [toplevel: true, extend: true]}
+  @doc """
+  Declare a schema
+
+  Optional declaration of the schema. Useful if you want to add directives
+  to your schema declaration
+
+  ## Placement
+
+  #{Utils.placement_docs(@placement)}
+
+  ## Examples
+
+  ```
+  schema do
+    directive :feature
+    field :query, :query
+    # ...
+  end
+  ```
+  """
+  defmacro schema(do: block) do
+    __CALLER__
+    |> recordable!(:schema, @placement[:schema])
+    |> record_schema!(block)
+  end
+
   @placement {:deprecate, [under: [:field]]}
   @doc """
   Mark a field as deprecated
@@ -330,12 +358,13 @@ defmodule Absinthe.Schema.Notation do
   end
   ```
   """
-  defmacro deprecate(msg) do
+  defmacro deprecate(msg \\ nil) do
     __CALLER__
     |> recordable!(:deprecate, @placement[:deprecate])
     |> record_deprecate!(msg)
   end
 
+  @placement {:interface_attribute, [under: [:object, :interface]]}
   @doc """
   Declare an implemented interface for an object.
 
@@ -343,6 +372,10 @@ defmodule Absinthe.Schema.Notation do
 
   See also `interfaces/1`, which can be used for multiple interfaces,
   and `interface/3`, used to define interfaces themselves.
+
+  ## Placement
+
+  #{Utils.placement_docs(@placement)}
 
   ## Examples
 
@@ -353,7 +386,6 @@ defmodule Absinthe.Schema.Notation do
   end
   ```
   """
-  @placement {:interface_attribute, [under: [:object, :interface]]}
   defmacro interface(identifier) do
     __CALLER__
     |> recordable!(:interface_attribute, @placement[:interface_attribute])
@@ -477,7 +509,7 @@ defmodule Absinthe.Schema.Notation do
   end
 
   # FIELDS
-  @placement {:field, [under: [:input_object, :interface, :object]]}
+  @placement {:field, [under: [:input_object, :interface, :object, :schema_declaration]]}
   @doc """
   Defines a GraphQL field
 
@@ -758,9 +790,9 @@ defmodule Absinthe.Schema.Notation do
 
   ## Examples
   ```
-  scalar :time, description: "ISOz time" do
-    parse &Timex.parse(&1.value, "{ISOz}")
-    serialize &Timex.format!(&1, "{ISOz}")
+  scalar :isoz_datetime, description: "UTC only ISO8601 date time" do
+    parse &Timex.parse(&1, "{ISO:Extended:Z}")
+    serialize &Timex.format!(&1, "{ISO:Extended:Z}")
   end
   ```
   """
@@ -932,6 +964,7 @@ defmodule Absinthe.Schema.Notation do
                   :interface,
                   :object,
                   :scalar,
+                  :schema_declaration,
                   :union,
                   :value
                 ]
@@ -1592,6 +1625,25 @@ defmodule Absinthe.Schema.Notation do
     ]
   end
 
+  def record_schema!(env, block) do
+    attrs =
+      []
+      |> Keyword.put(:module, env.module)
+      |> put_reference(env)
+
+    definition = struct!(Schema.SchemaDeclaration, attrs)
+
+    ref = put_attr(env.module, definition)
+
+    push_stack(env.module, :absinthe_scope_stack, :schema_declaration)
+
+    [
+      get_desc(ref),
+      block,
+      quote(do: unquote(__MODULE__).close_scope())
+    ]
+  end
+
   defp handle_extend_attrs(attrs, caller) do
     block =
       case Keyword.get(attrs, :meta) do
@@ -1658,11 +1710,9 @@ defmodule Absinthe.Schema.Notation do
 
   @doc false
   # Record an implemented interface in the current scope
-  def record_interface!(env, identifier) do
-    put_attr(env.module, {:interface, identifier})
-    # Scope.put_attribute(env.module, :interfaces, identifier, accumulate: true)
-    # Scope.recorded!(env.module, :attr, :interface)
-    # :ok
+  def record_interface!(env, type) do
+    type = expand_ast(type, env)
+    put_attr(env.module, {:interface, type})
   end
 
   @doc false
@@ -1682,7 +1732,12 @@ defmodule Absinthe.Schema.Notation do
   @doc false
   # Record a list of member types for a union in the current scope
   def record_types!(env, types) do
-    put_attr(env.module, {:types, types})
+    Enum.each(types, &record_type!(env, &1))
+  end
+
+  defp record_type!(env, type) do
+    type = expand_ast(type, env)
+    put_attr(env.module, {:type, type})
   end
 
   @doc false
@@ -1769,6 +1824,7 @@ defmodule Absinthe.Schema.Notation do
       |> build_directive_arguments(env)
       |> Keyword.put(:name, name)
       |> put_reference(env)
+      |> Keyword.put(:source_location, Absinthe.Blueprint.SourceLocation.at(env.line, 0))
 
     directive = struct!(Absinthe.Blueprint.Directive, attrs)
     put_attr(env.module, {:directive, directive})
@@ -2381,6 +2437,9 @@ defmodule Absinthe.Schema.Notation do
 
   defp recordable?([toplevel: true, extend: true], scope),
     do: scope == :schema || scope == :extend
+
+  defp recordable?([toplevel: false, extend: true], scope),
+    do: scope == :extend
 
   defp recordable?([toplevel: true], scope), do: scope == :schema
   defp recordable?([toplevel: false], scope), do: scope != :schema
